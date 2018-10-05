@@ -378,6 +378,7 @@ class ToolHead:
         self.extruder = extruder
         self.move_queue.set_extruder(extruder)
         self.commanded_pos[3] = extrude_pos
+        self.notify_event(last_move_time, 'toolhead:extruder_activate')
     def get_extruder(self):
         return self.extruder
     # Misc commands
@@ -422,6 +423,10 @@ class ToolHead:
         self.junction_deviation = scv2 * (math.sqrt(2.) - 1.) / self.max_accel
         self.max_accel_to_decel = min(self.requested_accel_to_decel,
                                       self.max_accel)
+    def notify_event(self, print_time, event):
+        for o in self.printer.lookup_objects():
+            if hasattr(o, 'toolhead_event'):
+                o.toolhead_event(print_time, event)
     cmd_SET_VELOCITY_LIMIT_help = "Set printer velocity limits"
     def cmd_SET_VELOCITY_LIMIT(self, params):
         print_time = self.get_last_move_time()
