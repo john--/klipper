@@ -6,13 +6,13 @@
 #
 # This file may be distributed under the terms of the GNU GPLv3 license.
 import logging
-import hd44780, st7920, uc1701
+import hd44780, st7920, uc1701, ssd1327
 import menu
 
 LCD_chips = {
     'st7920': st7920.ST7920, 'hd44780': hd44780.HD44780,
     'uc1701': uc1701.UC1701, 'ssd1306': uc1701.SSD1306,
-    'st7567': uc1701.ST7567,
+    'st7567': uc1701.ST7567, 'ssd1327': ssd1327.SSD1327,
 }
 M73_TIMEOUT = 5.
 
@@ -90,6 +90,8 @@ class PrinterLCD:
         self.lcd_chip.clear()
         if self.lcd_type == 'hd44780':
             self.screen_update_hd44780(eventtime)
+        elif self.lcd_type == 'ssd1327':
+            self.screen_update_128x128(eventtime)
         else:
             self.screen_update_128x64(eventtime)
         self.lcd_chip.flush()
@@ -138,31 +140,31 @@ class PrinterLCD:
         lcd_chip.write_glyph(14, 2, 'clock')
         self.draw_time(15, 2, toolhead_info['printing_time'])
         self.draw_status(0, 3, gcode_info, toolhead_info)
-    def screen_update_128x64(self, eventtime):
+    def screen_update_128x64(self, eventtime, y_offset = 0):
         # Heaters
         if self.extruder0 is not None:
             info = self.extruder0.get_heater().get_status(eventtime)
-            self.lcd_chip.write_glyph(0, 0, 'extruder')
-            self.draw_heater(2, 0, info)
+            self.lcd_chip.write_glyph(0, y_offset, 'extruder')
+            self.draw_heater(2, y_offset, info)
         extruder_count = 1
         if self.extruder1 is not None:
             info = self.extruder1.get_heater().get_status(eventtime)
-            self.lcd_chip.write_glyph(0, 1, 'extruder')
-            self.draw_heater(2, 1, info)
+            self.lcd_chip.write_glyph(0, 1 + y_offset, 'extruder')
+            self.draw_heater(2, 1 + y_offset, info)
             extruder_count = 2
         if self.heater_bed is not None:
             info = self.heater_bed.get_status(eventtime)
             if info['target']:
-                self.animate_glyphs(eventtime, 0, extruder_count,
+                self.animate_glyphs(eventtime, 0, extruder_count + y_offset,
                                     'bed_heat', True)
             else:
-                self.lcd_chip.write_glyph(0, extruder_count, 'bed')
-            self.draw_heater(2, extruder_count, info)
+                self.lcd_chip.write_glyph(0, extruder_count + y_offset, 'bed')
+            self.draw_heater(2, extruder_count + y_offset, info)
         # Fan speed
         if self.fan is not None:
             info = self.fan.get_status(eventtime)
-            self.animate_glyphs(eventtime, 10, 0, 'fan', info['speed'] != 0.)
-            self.draw_percent(12, 0, 4, info['speed'], '>')
+            self.animate_glyphs(eventtime, 10, y_offset, 'fan', info['speed'] != 0.)
+            self.draw_percent(12, y_offset, 4, info['speed'], '>')
         # SD card print progress
         progress = None
         toolhead_info = self.toolhead.get_status(eventtime)
@@ -181,13 +183,13 @@ class PrinterLCD:
                 x, y, width = 0, 2, 10
             else:
                 x, y, width = 10, 1, 6
-            self.draw_percent(x, y, width, progress, '^')
-            self.draw_progress_bar(x, y, width, progress)
+            self.draw_percent(x, y + y_offset, width, progress, '^')
+            self.draw_progress_bar(x, y + y_offset, width, progress)
         # G-Code speed factor
         gcode_info = self.gcode.get_status(eventtime)
         if extruder_count == 1:
-            self.lcd_chip.write_glyph(10, 1, 'feedrate')
-            self.draw_percent(12, 1, 4, gcode_info['speed_factor'], '>')
+            self.lcd_chip.write_glyph(10, 1 + y_offset, 'feedrate')
+            self.draw_percent(12, 1 + y_offset, 4, gcode_info['speed_factor'], '>')
         # Printing time and status
         printing_time = toolhead_info['printing_time']
         remaining_time = None
@@ -195,12 +197,14 @@ class PrinterLCD:
             remaining_time = int(printing_time / progress) - printing_time
         # switch mode every 6s
         if remaining_time is not None and int(eventtime) % 12 < 6:
-            self.lcd_chip.write_text(10, 2, "-")
-            self.draw_time(11, 2, remaining_time)
+            self.lcd_chip.write_text(10, 2 + y_offset, "-")
+            self.draw_time(11, 2 + y_offset, remaining_time)
         else:
             offset = 1 if printing_time < 100 * 60 * 60 else 0
-            self.draw_time(10 + offset, 2, printing_time)
-        self.draw_status(0, 3, gcode_info, toolhead_info)
+            self.draw_time(10 + offset, 2 + y_offset, printing_time)
+        self.draw_status(0, 3 + y_offset, gcode_info, toolhead_info)
+    def screen_update_128x128(self, eventtime):
+        self.screen_update_128x64(eventtime, y_offset=2)
     # Screen update helpers
     def draw_text(self, x, y, mixed_text):
         pos = x

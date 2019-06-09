@@ -13,12 +13,16 @@ BACKGROUND_PRIORITY_CLOCK = 0x7fffffff00000000
 TextGlyphs = { 'right_arrow': '\x1a', 'degrees': '\xf8' }
 
 class DisplayBase:
+
+    screen_height = 64
+
     def __init__(self, io):
         self.send = io.send
         # framebuffers
-        self.vram = [bytearray(128) for i in range(8)]
+        self.max_rows = self.screen_height//8
+        self.vram = [bytearray(128) for i in range(self.max_rows)]
         self.all_framebuffers = [(self.vram[i], bytearray('~'*128), i)
-                                 for i in range(8)]
+                                 for i in range(self.max_rows)]
         # Cache fonts and icons in display byte order
         self.font = [self._swizzle_bits(bytearray(c))
                      for c in font8x14.VGA_FONT]
@@ -75,7 +79,7 @@ class DisplayBase:
     def write_graphics(self, x, y, row, data):
         if x + len(data) > 16:
             data = data[:16 - min(x, 16)]
-        page = self.vram[y * 2 + (row >= 8)]
+        page = self.vram[y * 2 + (row >= self.max_rows)]
         bit = 1 << (row % 8)
         pix_x = x * 8
         for bits in data:
